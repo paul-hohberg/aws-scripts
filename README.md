@@ -1,2 +1,2 @@
 # aws-scripts
-Scripts used with AWS
+Scripts used for AWS.
