@@ -12,27 +12,15 @@ yum-config-manager --add-repo \
 http://rpms.remirepo.net/enterprise/remi.repo
 yum-config-manager --disable remi-safe
 yum-config-manager --enable remi-php71
-cat << EOF > /etc/yum.repos.d/packages-microsoft-com-prod.repo
-[packages-microsoft-com-prod]
-name=packages-microsoft-com-prod
-baseurl=https://packages.microsoft.com/rhel/7/prod/
-enabled=1
-gpgcheck=1
-gpgkey=https://packages.microsoft.com/keys/microsoft.asc
-EOF
-ACCEPT_EULA='Y'
+curl https://packages.microsoft.com/config/rhel/7/prod.repo > /etc/yum.repos.d/mssql-release.repo
 #Install packages
 #yum update -y
-yum install -y git gcc gcc-c++ httpd msodbcsql mssql-tools php php-devel php-intl php-ldap \
-php-mbstring php-mysqlnd php-opcache php-pdo php-pecl-apcu php-process php-pecl-redis php-soap \
-php-mcrypt php-xml php-pear python-pip re2c unixODBC-devel
+yum install -y git gcc gcc-c++ httpd php php-devel php-intl php-ldap \
+php-mbstring php-mcrypt php-mysqlnd php-opcache php-pdo php-pecl-apcu php-process \
+php-pecl-redis php-soap php-sqlsrv php-xml python-pip re2c unixODBC-devel
+ACCEPT_EULA=Y yum install -y msodbcsql17 mssql-tools
 pip install --upgrade pip
 pip install --upgrade --user awscli
-#Setup PHP
-pecl install sqlsrv
-pecl install pdo_sqlsrv
-echo "extension=sqlsrv.so" > /etc/php.d/sqlsrv.ini
-echo "extension=pdo_sqlsrv.so" > /etc/php.d/pdo_sqlsrv.ini
 sed -i -e "s/;date.timezone =/date.timezone = 'America\/Los_Angeles'/g" /etc/php.ini
 cat << EOF > /etc/profile.d/mssql-tools.sh
 if ! echo $PATH | grep -q /opt/mssql-tools/bin ; then
@@ -40,8 +28,8 @@ if ! echo $PATH | grep -q /opt/mssql-tools/bin ; then
 fi
 EOF
 #Install jwt keys
-/root/.local/bin/aws s3api get-object --bucket encrypted.bucket --key jwt-private.pem /etc/pki/tls/private/jwt-private.pem
-/root/.local/bin/aws s3api get-object --bucket encrypted.bucket --key jwt-public.pem /etc/pki/tls/certs/jwt-public.pem
+/root/.local/bin/aws s3api get-object --bucket nameofbucket --key jwt-private.pem /etc/pki/tls/private/jwt-private.pem
+/root/.local/bin/aws s3api get-object --bucket nameofbucket --key jwt-public.pem /etc/pki/tls/certs/jwt-public.pem
 chgrp apache /etc/pki/tls/private/jwt-private.pem
 chmod 440 /etc/pki/tls/private/jwt-private.pem
 #Configure LDAP
@@ -73,17 +61,17 @@ cat << EOF > /etc/httpd/conf.d/api.conf
 EOF
 #Deploy application code from Git
 mkdir /var/www/google
-/root/.local/bin/aws s3api get-object --bucket encrypted.bucket --key credentials.json /var/www/google/credentials.json
+/root/.local/bin/aws s3api get-object --bucket nameofbucket --key credentials.json /var/www/google/credentials.json
 chown -R apache:apache /var/www/google
 chmod 0550 /var/www/google
 chmod 0440 /var/www/google/credentials.json
-/root/.local/bin/aws s3api get-object --bucket encrypted.bucket --key iamucla-api-deployment.key /root/.ssh/id_rsa
+/root/.local/bin/aws s3api get-object --bucket secure.store.logon --key iamucla-api-deployment.key /root/.ssh/id_rsa
 chmod 400 /root/.ssh/id_rsa
 ssh-keyscan github.com,192.30.255.112 >> /root/.ssh/known_hosts 2>/dev/null
 ssh-keyscan 192.30.255.113 >> /root/.ssh/known_hosts 2>/dev/null
 #git clone -b 'artifacts/latest' --single-branch --depth 1 git@github.com:activelamp/iamucla-api.git /var/www/html/api
 git clone -b 'artifacts/qdb' --single-branch --depth 1 git@github.com:activelamp/iamucla-api.git /var/www/html/api
-/root/.local/bin/aws s3api get-object --bucket encrypted.bucket --key parameters-api.yml /var/www/html/api/app/config/parameters.yml
+/root/.local/bin/aws s3api get-object --bucket nameofbucket --key parameters-api.yml /var/www/html/api/app/config/parameters.yml
 ln -s /var/www/html/api/web /var/www/html/root
 chown -R apache:apache /var/www/html/api
 chmod 775 /var/www/html/api/var/cache
@@ -111,7 +99,7 @@ systemctl start httpd
 /root/.local/bin/aws s3api get-object --bucket store.logon --key api_git_pull.sh /usr/local/sbin/api_git_pull.sh
 chown root:root /usr/local/sbin/api_git_pull.sh
 chmod 550 /usr/local/sbin/api_git_pull.sh
-echo "*/15 * * * * root /usr/local/sbin/api_git_pull.sh" > /etc/cron.d/api_git_pull
+echo "0 * * * * root /usr/local/sbin/api_git_pull.sh" > /etc/cron.d/api_git_pull
 chown root:root /etc/cron.d/api_git_pull
 chmod 440 /etc/crond./api_git_pull
 #Install and configure CloudWatch log agent
